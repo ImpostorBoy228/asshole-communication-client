@@ -6,19 +6,19 @@
     <title>Asshole Communication</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body class="p-6" style="padding-top: calc(1.5rem + env(safe-area-inset-top, 0px)); padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));">
-    <div class="flex items-center justify-between mb-4">
+  <body class="p-6 flex flex-col overflow-hidden" style="padding-top: calc(1.5rem + env(safe-area-inset-top, 0px)); padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));">
+    <div class="flex items-center justify-between mb-4 shrink-0">
       <h2 class="text-xl font-semibold">Asshole Communication</h2>
       <a href="settings.html" aria-label="Settings">
         <img src="/settings.webp" alt="Settings" class="w-6 h-6" />
       </a>
     </div>
-    <div id="messages" class="messages space-y-2 mb-4"></div>
-    <form id="messageForm" class="flex gap-2">
-      <input type="text" id="lol" class="input" placeholder="message" required />
-      <button type="submit" id="bruh" class="btn">Let's dance, baby</button>
+    <div id="messages" class="messages flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-2 mb-4"></div>
+    <form id="messageForm" class="flex gap-2 shrink-0">
+      <input type="text" id="lol" class="input min-w-0 flex-1" placeholder="message" required />
+      <button type="submit" id="bruh" class="btn shrink-0">Let's dance, baby</button>
     </form>
-    <p id="nickHint" class="mt-2 text-xs text-destructive" hidden>сначала ник</p>
+    <p id="nickHint" class="mt-2 text-xs text-destructive shrink-0" hidden>сначала ник</p>
     <script type="module" src="/main.ts"></script>
   </body>
 </html>

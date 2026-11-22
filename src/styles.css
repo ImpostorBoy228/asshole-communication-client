@@ -1,2 +1,60 @@
 @import "tailwindcss";
 @import "basecoat-css/lyra";
+
+/* Keep long messages from stretching the page horizontally/vertically.
+   The chat container scrolls internally so the send form stays visible. */
+html {
+  height: 100%;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.messages {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overscroll-behavior: contain;
+}
+
+.messages * {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+#messageForm input {
+  min-width: 0;
+}
+
+/* Mobile-specific hardening */
+@media (max-width: 768px) {
+  html,
+  body {
+    width: 100%;
+    max-width: 100vw;
+  }
+
+  body {
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .messages {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  #messageForm {
+    gap: 0.5rem;
+  }
+
+  #messageForm button {
+    white-space: nowrap;
+  }
+}

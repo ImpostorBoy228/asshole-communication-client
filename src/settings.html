@@ -6,8 +6,8 @@
     <title>Asshole Communication</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body class="p-6" style="padding-top: calc(1.5rem + env(safe-area-inset-top, 0px)); padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));">
-    <div class="flex items-center justify-between mb-6">
+  <body class="p-6 flex flex-col overflow-hidden" style="padding-top: calc(1.5rem + env(safe-area-inset-top, 0px)); padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));">
+    <div class="flex items-center justify-between mb-6 shrink-0">
       <h2 class="text-xl font-semibold">Настройки</h2>
       <a href="index.html" aria-label="Exit">
         <img src="/exit.webp" alt="Exit" class="w-6 h-6" />
@@ -16,7 +16,7 @@
 
     <form
       id="settingsNick"
-      class="card flex w-full max-w-md flex-col gap-5 rounded-xl border border-border bg-card p-6 shadow-sm"
+      class="card flex w-full max-w-md flex-1 min-h-0 overflow-y-auto flex-col gap-5 rounded-xl border border-border bg-card p-6 shadow-sm"
     >
       <div class="field">
         <label for="nick">Ник</label>
