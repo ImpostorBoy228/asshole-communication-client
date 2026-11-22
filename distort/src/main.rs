@@ -89,7 +89,7 @@ fn main() {
 
     // 4. Pixel sorting by brightness on random rows
     for y in 0..h as usize {
-        if rng.gen::<f32>() < 0.12 {
+        if rng.r#gen::<f32>() < 0.12 {
             let start = y * w as usize;
             let end = start + w as usize;
             let mut row: Vec<[f32; 4]> = out[start..end].to_vec();
