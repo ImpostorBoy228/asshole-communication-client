@@ -15,7 +15,7 @@ val tauriProperties = Properties().apply {
 }
 
 val keystoreProperties = Properties().apply {
-    val propFile = rootProject.file("../../keystore.properties")
+    val propFile = rootProject.file("../../../keystore.properties")
     if (propFile.exists()) {
         propFile.inputStream().use { load(it) }
     }
@@ -36,7 +36,7 @@ android {
         create("release") {
             val storeFilePath = keystoreProperties.getProperty("storeFile")
             if (storeFilePath != null) {
-                storeFile = rootProject.file("../../$storeFilePath")
+                storeFile = rootProject.file("../../../$storeFilePath")
             }
             storePassword = keystoreProperties.getProperty("password")
             keyAlias = keystoreProperties.getProperty("keyAlias")
