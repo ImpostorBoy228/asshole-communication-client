@@ -1,5 +1,6 @@
 import "basecoat-css/all";
 import { invoke } from "@tauri-apps/api/core";
+import { onBackButtonPress } from "@tauri-apps/api/app";
 
 const NICK_KEY = "nick";
 
@@ -53,3 +54,13 @@ form.addEventListener("submit", async (e) => {
 });
 
 loadSettings();
+
+onBackButtonPress(() => {
+  // Settings always returns to the main screen.
+  location.replace("index.html");
+});
+
+document.querySelector<HTMLAnchorElement>('a[href="index.html"]')?.addEventListener("click", (e) => {
+  e.preventDefault();
+  location.replace("index.html");
+});

@@ -1,5 +1,6 @@
 import "basecoat-css/all";
 import { invoke } from "@tauri-apps/api/core";
+import { onBackButtonPress } from "@tauri-apps/api/app";
 
 interface Entry {
   blud: string;
@@ -126,5 +127,16 @@ async function start(): Promise<void> {
     }
   }
 }
+
+onBackButtonPress(() => {
+  // Root page: hardware Back does nothing, like a native app root screen.
+});
+
+// Treat in-app navigation as replace (no browser-style history) so Back
+// never bounces between pages.
+document.querySelector<HTMLAnchorElement>('a[href="settings.html"]')?.addEventListener("click", (e) => {
+  e.preventDefault();
+  location.replace("settings.html");
+});
 
 start();
