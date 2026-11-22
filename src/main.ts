@@ -118,7 +118,9 @@ form.addEventListener("submit", async (e) => {
 
 async function startBackgroundService(): Promise<void> {
   try {
-    await invoke("plugin:background-service|start", { config: {} });
+    await invoke("plugin:background-service|start", {
+      config: { serviceLabel: "asshole background service is running" },
+    });
     console.log("[bg] service started");
   } catch (err) {
     console.warn("[bg] service start failed", err);

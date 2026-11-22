@@ -23,7 +23,9 @@
     }
   },
   "plugins": {
-    "background-service": {}
+    "background-service": {
+      "androidForegroundServiceTypes": ["remoteMessaging"]
+    }
   },
   "bundle": {
     "active": true,
