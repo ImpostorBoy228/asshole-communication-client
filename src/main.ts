@@ -1,5 +1,5 @@
 import "basecoat-css/all";
-import { invoke } from "@tauri-apps/api/core";
+import { addPluginListener, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { onBackButtonPress } from "@tauri-apps/api/app";
 
@@ -136,6 +136,19 @@ async function requestNotificationPermission(): Promise<void> {
   }
 }
 
+async function startNativeLifecycleBridge(): Promise<void> {
+  try {
+    await addPluginListener("background-service", "native-lifecycle-event", (payload: unknown) => {
+      invoke("plugin:background-service|native_lifecycle_event", { event: payload }).catch((err) => {
+        console.warn("[bg] native lifecycle event forward failed", err);
+      });
+    });
+    console.log("[bg] native lifecycle bridge started");
+  } catch (err) {
+    console.warn("[bg] native lifecycle bridge unavailable", err);
+  }
+}
+
 function trackForeground(): void {
   const update = () => {
     const active = !document.hidden && document.hasFocus();
@@ -156,6 +169,7 @@ async function start(): Promise<void> {
   });
 
   trackForeground();
+  await startNativeLifecycleBridge();
   await requestNotificationPermission();
   await startBackgroundService();
 
