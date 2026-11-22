@@ -119,18 +119,42 @@ form.addEventListener("submit", async (e) => {
 async function startBackgroundService(): Promise<void> {
   try {
     await invoke("plugin:background-service|start", { config: {} });
-  } catch {
-    // ignore: already running or unavailable
+    console.log("[bg] service started");
+  } catch (err) {
+    console.warn("[bg] service start failed", err);
   }
+}
+
+async function requestNotificationPermission(): Promise<void> {
+  try {
+    const res = await invoke("plugin:background-service|request_notification_permission");
+    console.log("[bg] notification permission", res);
+  } catch (err) {
+    console.warn("[bg] notification permission failed", err);
+  }
+}
+
+function trackForeground(): void {
+  const update = () => {
+    const active = !document.hidden && document.hasFocus();
+    invoke("set_foreground", { active }).catch(() => {});
+  };
+  document.addEventListener("visibilitychange", update);
+  window.addEventListener("focus", update);
+  window.addEventListener("blur", update);
+  update();
 }
 
 async function start(): Promise<void> {
   await loadNick();
 
   await listen<Entry>("chat://message", (event) => {
+    console.log("[ws] message", event.payload);
     appendMessage(event.payload);
   });
 
+  trackForeground();
+  await requestNotificationPermission();
   await startBackgroundService();
 
   try {

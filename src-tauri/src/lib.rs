@@ -2,7 +2,14 @@ use async_trait::async_trait;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqlitePool, sqlite::SqliteConnectOptions};
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{
+    collections::HashMap,
+    str::FromStr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
 use tauri::{Emitter, Manager};
 use tauri_plugin_background_service::{init_with_service, BackgroundService, ServiceContext, ServiceError};
 use tokio::time::{sleep, Duration};
@@ -37,6 +44,81 @@ async fn insert_local_message(pool: &SqlitePool, message: &Entry) -> Result<bool
     Ok(result.rows_affected() > 0)
 }
 
+async fn max_local_created_at(pool: &SqlitePool) -> Result<Option<i64>, String> {
+    let row = sqlx::query("SELECT MAX(created_at) AS max_created_at FROM chat")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    row.try_get::<Option<i64>, _>("max_created_at")
+        .map_err(|e| e.to_string())
+}
+
+async fn fetch_remote_messages(
+    http: &reqwest::Client,
+    base: &str,
+    since: Option<&str>,
+) -> Result<Vec<Entry>, String> {
+    let url = api_url(base, "/api/diddy_chat");
+    let mut req = http.get(&url);
+    if let Some(since) = since.filter(|s| !s.is_empty()) {
+        req = req.json(&serde_json::json!({ "since": since }));
+    }
+    let resp = req.send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+    resp.json().await.map_err(|e| e.to_string())
+}
+
+async fn local_nick(pool: &SqlitePool) -> Result<String, String> {
+    let row = sqlx::query("SELECT shit FROM settings WHERE rizz = ?")
+        .bind("nick")
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(match row {
+        Some(row) => row.try_get::<String, _>("shit").map_err(|e| e.to_string())?,
+        None => String::new(),
+    })
+}
+
+fn should_notify(entry: &Entry, nick: &str, is_foreground: bool) -> bool {
+    if is_foreground {
+        return false;
+    }
+    let nick = nick.trim();
+    if !nick.is_empty() && entry.blud == nick {
+        return false;
+    }
+    true
+}
+
+async fn catch_up_messages<R: tauri::Runtime>(ctx: &ServiceContext<R>) -> Result<(), String> {
+    let pool = ctx.app.state::<SqlitePool>().inner().clone();
+    let state = ctx.app.state::<Arc<AppState>>().inner().clone();
+    let foreground = ctx.app.state::<Arc<AtomicBool>>().inner().clone();
+
+    let since = max_local_created_at(&pool)
+        .await?
+        .map(|v| v.to_string());
+    let remote = fetch_remote_messages(&state.http, &state.base, since.as_deref()).await?;
+    let nick = local_nick(&pool).await.unwrap_or_default();
+    let is_foreground = foreground.load(Ordering::SeqCst);
+
+    for entry in remote {
+        let inserted = insert_local_message(&pool, &entry).await.unwrap_or(false);
+        if inserted {
+            let _ = ctx.app.emit("chat://message", &entry);
+            if should_notify(&entry, &nick, is_foreground) {
+                let title = if entry.blud.is_empty() { "???" } else { &entry.blud };
+                ctx.notifier.show(title, &entry.lol);
+            }
+        }
+    }
+
+    Ok(())
+}
+
 struct ChatService;
 
 impl ChatService {
@@ -53,6 +135,7 @@ impl<R: tauri::Runtime> BackgroundService<R> for ChatService {
 
     async fn run(&mut self, ctx: &ServiceContext<R>) -> Result<(), ServiceError> {
         let ws_url = "wss://impostorboy.ru/ws".to_string();
+        eprintln!("[chat-bg] service started");
 
         loop {
             if ctx.shutdown.is_cancelled() {
@@ -61,33 +144,58 @@ impl<R: tauri::Runtime> BackgroundService<R> for ChatService {
 
             match connect_async(&ws_url).await {
                 Ok((ws_stream, _)) => {
+                    eprintln!("[chat-bg] ws connected");
+                    if let Err(e) = catch_up_messages(ctx).await {
+                        eprintln!("[chat-bg] catch-up failed: {e}");
+                    }
                     let (_write, mut read) = ws_stream.split();
                     loop {
                         tokio::select! {
                             _ = ctx.shutdown.cancelled() => {
+                                eprintln!("[chat-bg] shutdown");
                                 return Ok(());
                             }
                             msg = read.next() => {
-                                let Some(msg) = msg else { break; };
-                                let Ok(msg) = msg else { break; };
+                                let Some(msg) = msg else {
+                                    eprintln!("[chat-bg] ws stream ended");
+                                    break;
+                                };
+                                let msg = match msg {
+                                    Ok(msg) => msg,
+                                    Err(e) => {
+                                        eprintln!("[chat-bg] ws read error: {e}");
+                                        break;
+                                    }
+                                };
                                 if !msg.is_text() {
                                     continue;
                                 }
                                 let Ok(text) = msg.to_text() else { continue; };
-                                let Ok(entry) = serde_json::from_str::<Entry>(text) else { continue; };
+                                let Ok(entry) = serde_json::from_str::<Entry>(text) else {
+                                    eprintln!("[chat-bg] bad ws payload: {text}");
+                                    continue;
+                                };
 
                                 let pool = ctx.app.state::<SqlitePool>().inner().clone();
                                 let inserted = insert_local_message(&pool, &entry).await.unwrap_or(false);
+                                eprintln!("[chat-bg] msg inserted={inserted} time={}", entry.time);
                                 if inserted {
                                     let _ = ctx.app.emit("chat://message", &entry);
-                                    let title = if entry.blud.is_empty() { "???" } else { &entry.blud };
-                                    ctx.notifier.show(title, &entry.lol);
+                                    let foreground = ctx.app.state::<Arc<AtomicBool>>().inner().clone();
+                                    let nick = local_nick(&pool).await.unwrap_or_default();
+                                    let is_foreground = foreground.load(Ordering::SeqCst);
+                                    if should_notify(&entry, &nick, is_foreground) {
+                                        let title = if entry.blud.is_empty() { "???" } else { &entry.blud };
+                                        ctx.notifier.show(title, &entry.lol);
+                                    }
                                 }
                             }
                         }
                     }
                 }
-                Err(_) => {}
+                Err(e) => {
+                    eprintln!("[chat-bg] ws connect failed: {e}");
+                }
             }
 
             tokio::select! {
@@ -105,18 +213,7 @@ async fn get_messages(
     state: tauri::State<'_, Arc<AppState>>,
     since: Option<String>,
 ) -> Result<Vec<Entry>, String> {
-    let url = api_url(&state.base, "/api/diddy_chat");
-    let mut req = state.http.get(&url);
-    let since = since.unwrap_or_default();
-    if !since.is_empty() {
-        req = req.json(&serde_json::json!({ "since": since }));
-    }
-    let resp = req.send().await.map_err(|e| e.to_string())?;
-    if !resp.status().is_success() {
-        return Err(format!("HTTP {}", resp.status()));
-    }
-    let messages: Vec<Entry> = resp.json().await.map_err(|e| e.to_string())?;
-    Ok(messages)
+    fetch_remote_messages(&state.http, &state.base, since.as_deref()).await
 }
 
 #[tauri::command]
@@ -232,6 +329,11 @@ async fn get_settings(
     Ok(settings)
 }
 
+#[tauri::command]
+fn set_foreground(foreground: tauri::State<'_, Arc<AtomicBool>>, active: bool) {
+    foreground.store(active, Ordering::SeqCst);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let base = "https://impostorboy.ru".to_string();
@@ -240,17 +342,21 @@ pub fn run() {
         base,
     });
 
+    let foreground = Arc::new(AtomicBool::new(true));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(init_with_service(|| ChatService::new()))
         .manage(state)
+        .manage(foreground)
         .invoke_handler(tauri::generate_handler![
             get_messages,
             post_message,
             get_local_messages,
             append_local_messages,
             set_settings,
-            get_settings
+            get_settings,
+            set_foreground
         ])
         .setup(|app| {
             let app_dir = app.path().app_data_dir()?;
@@ -290,4 +396,113 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn test_pool() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("in-memory db");
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS chat (
+                blud TEXT NOT NULL,
+                lol TEXT NOT NULL,
+                created_at BIGINT NOT NULL UNIQUE
+            )",
+        )
+        .execute(&pool)
+        .await
+        .expect("chat table");
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS settings (
+                rizz TEXT NOT NULL UNIQUE,
+                shit TEXT NOT NULL
+            )",
+        )
+        .execute(&pool)
+        .await
+        .expect("settings table");
+        pool
+    }
+
+    fn entry(blud: &str, lol: &str, time: &str) -> Entry {
+        Entry {
+            blud: blud.to_string(),
+            lol: lol.to_string(),
+            time: time.to_string(),
+        }
+    }
+
+    #[test]
+    fn should_notify_skips_own_message() {
+        let e = entry("alice", "hi", "1");
+        assert!(!should_notify(&e, "alice", false));
+    }
+
+    #[test]
+    fn should_notify_allows_other_message() {
+        let e = entry("bob", "hi", "1");
+        assert!(should_notify(&e, "alice", false));
+    }
+
+    #[test]
+    fn should_notify_skips_when_foreground() {
+        let e = entry("bob", "hi", "1");
+        assert!(!should_notify(&e, "alice", true));
+    }
+
+    #[test]
+    fn should_notify_allows_empty_nick() {
+        let e = entry("bob", "hi", "1");
+        assert!(should_notify(&e, "", false));
+    }
+
+    #[tokio::test]
+    async fn insert_local_message_dedups_by_created_at() {
+        let pool = test_pool().await;
+        let e = entry("a", "b", "123");
+        assert!(insert_local_message(&pool, &e).await.unwrap());
+        assert!(!insert_local_message(&pool, &e).await.unwrap());
+
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM chat")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[tokio::test]
+    async fn max_local_created_at_returns_none_when_empty() {
+        let pool = test_pool().await;
+        assert_eq!(max_local_created_at(&pool).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn max_local_created_at_returns_max() {
+        let pool = test_pool().await;
+        insert_local_message(&pool, &entry("a", "1", "10"))
+            .await
+            .unwrap();
+        insert_local_message(&pool, &entry("a", "2", "20"))
+            .await
+            .unwrap();
+        insert_local_message(&pool, &entry("a", "3", "15"))
+            .await
+            .unwrap();
+        assert_eq!(max_local_created_at(&pool).await.unwrap(), Some(20));
+    }
+
+    #[tokio::test]
+    async fn local_nick_reads_setting() {
+        let pool = test_pool().await;
+        assert_eq!(local_nick(&pool).await.unwrap(), "");
+        sqlx::query("INSERT INTO settings (rizz, shit) VALUES ('nick', 'alice')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(local_nick(&pool).await.unwrap(), "alice");
+    }
 }

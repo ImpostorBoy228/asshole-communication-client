@@ -8,7 +8,7 @@
   </head>
   <body class="p-6 flex flex-col overflow-hidden" style="padding-top: calc(1.5rem + env(safe-area-inset-top, 0px)); padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));">
     <div class="flex items-center justify-between mb-6 shrink-0">
-      <h2 class="text-xl font-semibold">Настройки</h2>
+      <h2 class="text-xl font-semibold">Settings</h2>
       <a href="index.html" aria-label="Exit">
         <img src="/exit.webp" alt="Exit" class="w-6 h-6" />
       </a>
@@ -19,7 +19,7 @@
       class="card flex w-full max-w-md flex-1 min-h-0 overflow-y-auto flex-col gap-5 rounded-xl border border-border bg-card p-6 shadow-sm"
     >
       <div class="field">
-        <label for="nick">Ник</label>
+        <label for="nick">Nickname</label>
         <input
           type="text"
           id="nick"
@@ -31,8 +31,8 @@
       </div>
 
       <div class="flex items-center gap-3">
-        <button type="submit" class="btn">Сохранить</button>
-        <span id="saved" class="text-sm text-muted-foreground" hidden>Сохранено</span>
+        <button type="submit" class="btn">Save</button>
+        <span id="saved" class="text-sm text-muted-foreground" hidden>Saved</span>
       </div>
 
       <p id="error" class="text-sm text-destructive" hidden></p>
