@@ -11,6 +11,7 @@ use std::{
     },
 };
 use tauri::{Emitter, Manager};
+use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_background_service::{init_with_service, BackgroundService, ServiceContext, ServiceError};
 use tokio::time::{sleep, Duration};
 use tokio_tungstenite::connect_async;
@@ -111,7 +112,17 @@ async fn catch_up_messages<R: tauri::Runtime>(ctx: &ServiceContext<R>) -> Result
             let _ = ctx.app.emit("chat://message", &entry);
             if should_notify(&entry, &nick, is_foreground) {
                 let title = if entry.blud.is_empty() { "???" } else { &entry.blud };
-                ctx.notifier.show(title, &entry.lol);
+                if let Err(e) = ctx
+                    .app
+                    .notification()
+                    .builder()
+                    .channel_id("chat_messages")
+                    .title(title)
+                    .body(&entry.lol)
+                    .show()
+                {
+                    eprintln!("[chat-bg] notification failed: {e}");
+                }
             }
         }
     }
@@ -186,7 +197,17 @@ impl<R: tauri::Runtime> BackgroundService<R> for ChatService {
                                     let is_foreground = foreground.load(Ordering::SeqCst);
                                     if should_notify(&entry, &nick, is_foreground) {
                                         let title = if entry.blud.is_empty() { "???" } else { &entry.blud };
-                                        ctx.notifier.show(title, &entry.lol);
+                                        if let Err(e) = ctx
+                                            .app
+                                            .notification()
+                                            .builder()
+                                            .channel_id("chat_messages")
+                                            .title(title)
+                                            .body(&entry.lol)
+                                            .show()
+                                        {
+                                            eprintln!("[chat-bg] notification failed: {e}");
+                                        }
                                     }
                                 }
                             }
@@ -391,6 +412,19 @@ pub fn run() {
             })?;
 
             app.manage(pool);
+
+            #[cfg(mobile)]
+            {
+                let channel = tauri_plugin_notification::Channel::builder(
+                    "chat_messages",
+                    "Chat messages",
+                )
+                .description("New chat messages")
+                .build();
+                if let Err(e) = app.notification().create_channel(channel) {
+                    eprintln!("[chat-bg] create notification channel failed: {e}");
+                }
+            }
 
             Ok(())
         })

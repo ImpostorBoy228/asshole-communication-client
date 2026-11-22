@@ -28,3 +28,7 @@ keystore.properties
 release-key.jks
 *.jks
 *.keystore
+
+# Rust tool artifacts
+distort/target
+

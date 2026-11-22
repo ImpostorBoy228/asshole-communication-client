@@ -25,6 +25,9 @@
   "plugins": {
     "background-service": {
       "androidForegroundServiceTypes": ["remoteMessaging"]
+    },
+    "notification": {
+      "icon": "ic_notification"
     }
   },
   "bundle": {
