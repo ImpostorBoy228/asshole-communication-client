@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "asshole-communication",
+        "title": "Asshole Communication",
         "width": 800,
         "height": 600
       }

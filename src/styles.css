@@ -1,12 +1,2 @@
-	nav {
-	    display: flex;
-	}
-	nav a {
-	    margin-right: 1rem;
-	}
-	nav a img {
-	    width: 1.5em;
-	    height: 1.5em;
-	    vertical-align: middle;
-	    margin-right: 0.25rem;
-	}
+@import "tailwindcss";
+@import "basecoat-css/lyra";

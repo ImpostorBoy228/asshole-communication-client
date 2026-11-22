@@ -1,10 +1,24 @@
 import { defineConfig } from "vite";
+import tailwindcss from "@tailwindcss/vite";
 // @ts-expect-error type error without @types/node package
 import process from "node:process";
+
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(() => ({
+  root: "src",
+  plugins: [tailwindcss()],
+  build: {
+    outDir: "../dist",
+    emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        index: "index.html",
+        settings: "settings.html",
+      },
+    },
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

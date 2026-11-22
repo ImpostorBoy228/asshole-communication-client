@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Asshole Communication</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="p-6">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-xl font-semibold">Настройки</h2>
+      <a href="index.html" aria-label="Exit">
+        <img src="/exit.webp" alt="Exit" class="w-6 h-6" />
+      </a>
+    </div>
+
+    <form
+      id="settingsNick"
+      class="card flex w-full max-w-md flex-col gap-5 rounded-xl border border-border bg-card p-6 shadow-sm"
+    >
+      <div class="field">
+        <label for="nick">Ник</label>
+        <input
+          type="text"
+          id="nick"
+          class="input"
+          placeholder="D1CK"
+          maxlength="64"
+          autocomplete="off"
+          required
+        />
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button type="submit" class="btn">Сохранить</button>
+        <span id="saved" class="text-sm text-muted-foreground" hidden>Сохранено</span>
+      </div>
+
+      <p id="error" class="text-sm text-destructive" hidden></p>
+    </form>
+
+    <script type="module" src="/settings.ts"></script>
+  </body>
+</html>
