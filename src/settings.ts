@@ -39,10 +39,6 @@ form.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   const nick = nickInput.value.trim();
-  if (nick === "") {
-    nickInput.focus();
-    return;
-  }
 
   try {
     await invoke("set_settings", { rizz: NICK_KEY, shit: nick });

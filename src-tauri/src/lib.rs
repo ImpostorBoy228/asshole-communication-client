@@ -1,7 +1,12 @@
+use async_trait::async_trait;
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqlitePool, sqlite::SqliteConnectOptions};
 use std::{collections::HashMap, str::FromStr, sync::Arc};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
+use tauri_plugin_background_service::{init_with_service, BackgroundService, ServiceContext, ServiceError};
+use tokio::time::{sleep, Duration};
+use tokio_tungstenite::connect_async;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Entry {
@@ -17,6 +22,82 @@ struct AppState {
 
 fn api_url(base: &str, path: &str) -> String {
     format!("{}{}", base.trim_end_matches('/'), path)
+}
+
+async fn insert_local_message(pool: &SqlitePool, message: &Entry) -> Result<bool, String> {
+    let created_at = message.time.parse::<i64>().map_err(|e| e.to_string())?;
+    let result =
+        sqlx::query("INSERT OR IGNORE INTO chat (blud, lol, created_at) VALUES (?, ?, ?)")
+            .bind(&message.blud)
+            .bind(&message.lol)
+            .bind(created_at)
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    Ok(result.rows_affected() > 0)
+}
+
+struct ChatService;
+
+impl ChatService {
+    fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl<R: tauri::Runtime> BackgroundService<R> for ChatService {
+    async fn init(&mut self, _ctx: &ServiceContext<R>) -> Result<(), ServiceError> {
+        Ok(())
+    }
+
+    async fn run(&mut self, ctx: &ServiceContext<R>) -> Result<(), ServiceError> {
+        let ws_url = "wss://impostorboy.ru/ws".to_string();
+
+        loop {
+            if ctx.shutdown.is_cancelled() {
+                break;
+            }
+
+            match connect_async(&ws_url).await {
+                Ok((ws_stream, _)) => {
+                    let (_write, mut read) = ws_stream.split();
+                    loop {
+                        tokio::select! {
+                            _ = ctx.shutdown.cancelled() => {
+                                return Ok(());
+                            }
+                            msg = read.next() => {
+                                let Some(msg) = msg else { break; };
+                                let Ok(msg) = msg else { break; };
+                                if !msg.is_text() {
+                                    continue;
+                                }
+                                let Ok(text) = msg.to_text() else { continue; };
+                                let Ok(entry) = serde_json::from_str::<Entry>(text) else { continue; };
+
+                                let pool = ctx.app.state::<SqlitePool>().inner().clone();
+                                let inserted = insert_local_message(&pool, &entry).await.unwrap_or(false);
+                                if inserted {
+                                    let _ = ctx.app.emit("chat://message", &entry);
+                                    let title = if entry.blud.is_empty() { "???" } else { &entry.blud };
+                                    ctx.notifier.show(title, &entry.lol);
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(_) => {}
+            }
+
+            tokio::select! {
+                _ = ctx.shutdown.cancelled() => break,
+                _ = sleep(Duration::from_secs(3)) => {}
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[tauri::command]
@@ -160,6 +241,8 @@ pub fn run() {
     });
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
+        .plugin(init_with_service(|| ChatService::new()))
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             get_messages,

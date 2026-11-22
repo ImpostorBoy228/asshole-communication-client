@@ -1,5 +1,6 @@
 import "basecoat-css/all";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { onBackButtonPress } from "@tauri-apps/api/app";
 
 interface Entry {
@@ -14,6 +15,7 @@ const lolInput = document.getElementById("lol") as HTMLInputElement;
 const nickHint = document.getElementById("nickHint")!;
 
 let nick = "";
+const seenTimes = new Set<string>();
 
 function formatITS(ns: string): string {
   const totalNs = BigInt(ns);
@@ -52,7 +54,16 @@ function messageNode(m: Entry): HTMLDivElement {
 }
 
 function renderMessages(messages: Entry[]): void {
+  seenTimes.clear();
+  for (const m of messages) seenTimes.add(m.time);
   messagesEl.replaceChildren(...messages.map(messageNode));
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function appendMessage(m: Entry): void {
+  if (seenTimes.has(m.time)) return;
+  seenTimes.add(m.time);
+  messagesEl.appendChild(messageNode(m));
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
@@ -68,12 +79,7 @@ async function loadNick(): Promise<void> {
   } catch {
     nick = "";
   }
-
-  if (nick === "") {
-    setHint("сначала ник");
-  } else {
-    setHint("");
-  }
+  setHint("");
 }
 
 // Local cache first: draw what we already have, then ask the server only for
@@ -95,11 +101,6 @@ async function syncMessages(): Promise<void> {
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
 
-  if (nick === "") {
-    setHint("сначала ник");
-    return;
-  }
-
   const lol = lolInput.value.trim();
   if (lol === "") {
     return;
@@ -115,16 +116,27 @@ form.addEventListener("submit", async (e) => {
   }
 });
 
+async function startBackgroundService(): Promise<void> {
+  try {
+    await invoke("plugin:background-service|start", { config: {} });
+  } catch {
+    // ignore: already running or unavailable
+  }
+}
+
 async function start(): Promise<void> {
   await loadNick();
+
+  await listen<Entry>("chat://message", (event) => {
+    appendMessage(event.payload);
+  });
+
+  await startBackgroundService();
 
   try {
     await syncMessages();
   } catch (err) {
-    // "сначала ник" is more important than a network error while there is no nick
-    if (nick !== "") {
-      setHint(String(err));
-    }
+    setHint(String(err));
   }
 }
 
